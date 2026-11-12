@@ -15,6 +15,21 @@ use Mockery as m;
 class FormBuilderTest extends PHPUnit\Framework\TestCase
 {
     /**
+     * @var UrlGenerator
+     */
+    protected $urlGenerator;
+
+    /**
+     * @var Factory|m\MockInterface
+     */
+    protected $viewFactory;
+
+    /**
+     * @var HtmlBuilder
+     */
+    protected $htmlBuilder;
+
+    /**
      * @var FormBuilder
      */
     protected $formBuilder;
@@ -695,6 +710,15 @@ class FormBuilderTest extends PHPUnit\Framework\TestCase
           $month1);
         $this->assertStringContainsString('<select name="month"><option value="1" selected="selected">January</option>', $month2);
         $this->assertStringContainsString('<select id="foo" name="month"><option value="1">January</option>', $month3);
+    }
+
+    public function testFormSelectMonthWithCustomFormat()
+    {
+        $year = date('Y');
+        $select = (string) $this->formBuilder->selectMonth('month', null, [], '%b %m, %Y %%');
+
+        $this->assertStringContainsString("<option value=\"1\">Jan 01, {$year} %</option>", $select);
+        $this->assertStringContainsString("<option value=\"12\">Dec 12, {$year} %</option>", $select);
     }
 
     public function testFormCheckbox()

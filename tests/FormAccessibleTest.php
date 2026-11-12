@@ -14,6 +14,36 @@ use Mockery as m;
 
 class FormAccessibleTest extends PHPUnit\Framework\TestCase
 {
+    /**
+     * @var Carbon
+     */
+    protected $now;
+
+    /**
+     * @var array
+     */
+    protected $modelData;
+
+    /**
+     * @var UrlGenerator
+     */
+    protected $urlGenerator;
+
+    /**
+     * @var Factory|m\MockInterface
+     */
+    protected $viewFactory;
+
+    /**
+     * @var HtmlBuilder
+     */
+    protected $htmlBuilder;
+
+    /**
+     * @var FormBuilder
+     */
+    protected $formBuilder;
+
     protected function setUp(): void
     {
         Capsule::table('models')->truncate();

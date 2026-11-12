@@ -116,7 +116,7 @@ class FormBuilder
      * @param  string                                     $csrfToken
      * @param  Request                                    $request
      */
-    public function __construct(HtmlBuilder $html, UrlGenerator $url, Factory $view, $csrfToken, Request $request = null)
+    public function __construct(HtmlBuilder $html, UrlGenerator $url, Factory $view, $csrfToken, ?Request $request = null)
     {
         $this->url = $url;
         $this->html = $html;
@@ -718,10 +718,81 @@ class FormBuilder
         $months = [];
 
         foreach (range(1, 12) as $month) {
-            $months[$month] = strftime($format, mktime(0, 0, 0, $month, 1));
+            $timestamp = mktime(0, 0, 0, $month, 1);
+
+            $months[$month] = PHP_VERSION_ID < 80100
+                ? strftime($format, $timestamp)
+                : $this->emulateStrftime($format, $timestamp);
         }
 
         return $this->select($name, $months, $selected, $options);
+    }
+
+    /**
+     * strftime() in the "C" locale, deprecated since PHP 8.1; GNU flags and field widths stay as written.
+     */
+    protected function emulateStrftime(string $format, int $timestamp): string
+    {
+        return preg_replace_callback('/%([EO]?)([a-zA-Z%])/', function ($match) use ($timestamp) {
+            // glibc prints these modifier combinations literally.
+            $rejectedModifiers = ['E' => 'abdeghjklmwABDFGHIMSUVW', 'O' => 'acxADFXY'];
+
+            if ($match[1] !== '' && strpos($rejectedModifiers[$match[1]], $match[2]) !== false) {
+                return $match[0];
+            }
+
+            return $this->strftimeConversion($match[2], $timestamp, $match[0]);
+        }, $format);
+    }
+
+    /**
+     * Unknown conversions stay as written, as glibc leaves them.
+     */
+    protected function strftimeConversion(string $conversion, int $timestamp, string $original): string
+    {
+        $dateFormats = [
+            'a' => 'D', 'A' => 'l', 'b' => 'M', 'B' => 'F', 'd' => 'd', 'D' => 'm/d/y', 'F' => 'Y-m-d',
+            'G' => 'o', 'h' => 'M', 'H' => 'H', 'I' => 'h', 'm' => 'm', 'M' => 'i', 'p' => 'A',
+            'P' => 'a', 'r' => 'h:i:s A', 'R' => 'H:i', 's' => 'U', 'S' => 's', 'T' => 'H:i:s',
+            'u' => 'N', 'V' => 'W', 'w' => 'w', 'x' => 'm/d/y', 'X' => 'H:i:s', 'y' => 'y',
+            'Y' => 'Y', 'z' => 'O', 'Z' => 'T',
+        ];
+
+        if (isset($dateFormats[$conversion])) {
+            return date($dateFormats[$conversion], $timestamp);
+        }
+
+        $spacePadded = ['e' => 'j', 'k' => 'G', 'l' => 'g'];
+
+        if (isset($spacePadded[$conversion])) {
+            return sprintf('%2d', date($spacePadded[$conversion], $timestamp));
+        }
+
+        $dayOfYear = (int) date('z', $timestamp);
+        $weekday = (int) date('w', $timestamp);
+
+        switch ($conversion) {
+            case 'c':
+                return $this->emulateStrftime('%a %b %e %H:%M:%S %Y', $timestamp);
+            case 'C':
+                return sprintf('%02d', intdiv((int) date('Y', $timestamp), 100));
+            case 'g':
+                return sprintf('%02d', (int) date('o', $timestamp) % 100);
+            case 'j':
+                return sprintf('%03d', $dayOfYear + 1);
+            case 'n':
+                return "\n";
+            case 't':
+                return "\t";
+            case 'U':
+                return sprintf('%02d', intdiv($dayOfYear + 7 - $weekday, 7));
+            case 'W':
+                return sprintf('%02d', intdiv($dayOfYear + 7 - ($weekday + 6) % 7, 7));
+            case '%':
+                return '%';
+        }
+
+        return $original;
     }
 
     /**
